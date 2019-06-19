@@ -14,6 +14,11 @@ pull_rawdata <- function(..., recursive = TRUE) {
 
   filelist <- dir(recursive = recursive)
 
+  if (any(str_detect(filelist, "~"))) {
+    warning("filenames containing \"~\" excluded")
+    filelist <- filelist[grep(filelist, pattern = "~", invert = TRUE)]
+  }
+
   infile <- map(terms, function(pattern) str_subset(filelist, pattern)) %>%
     reduce(intersect)
 
@@ -27,7 +32,8 @@ pull_rawdata <- function(..., recursive = TRUE) {
     )
   }
 
-  extension <- str_sub(infile, str_locate(infile, "\\.")[2] + 1)
+  pos <- str_locate_all(infile, "\\.")[[1]] %>% .[length(.)]
+  extension <- str_sub(infile, pos + 1)
   if (extension == "csv") {
     return(read_csv(infile))
   }
