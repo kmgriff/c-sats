@@ -91,8 +91,8 @@ final_month <- griftools::sig_test(prev_sum, cur_sum) %>%
 
 
 # Pull quarterly data
-q1_dat <- map(prev_quarter_file_search, function(x) griftools::pull_rawdata(x))
-q2_dat <- map(cur_quarter_file_search, function(x) griftools::pull_rawdata(x))
+q1_dat <- map(prev_quarter_file_search, griftools::pull_rawdata)
+q2_dat <- map(cur_quarter_file_search, griftools::pull_rawdata)
 
 # Create summaries
 q1_sum <- q1_dat %>%
