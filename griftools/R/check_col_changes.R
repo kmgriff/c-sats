@@ -22,14 +22,14 @@ check_col_changes <- function(prevdat, curdat, prevcols, curcols) {
     return(curcols)
   }
 
-  previndex <- map_int(prevcols, function(x) str_which(names(prevdat), x))
+  previndex <- map_int(paste0("^", prevcols, "$"), function(x) str_which(names(prevdat), x))
   curindex <- NULL
 
   for (i in 1:length(prevcols)) {
 
     # Detect presence of column
     if (prevcols[i] %in% names(curdat)) {
-      curindex <- c(curindex, str_which(names(curdat), prevcols[i]))
+      curindex <- c(curindex, str_which(names(curdat), paste0("^", prevcols[i], "$")))
 
       # Detect change in column position
       if (previndex[i] != curindex[i]) {
