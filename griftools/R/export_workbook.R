@@ -13,6 +13,9 @@ export_workbook <- function(data, sheetname = "Sheet1", fileprefix = "R Export")
   if (length(data) != length(sheetname)) {
     stop("\'data\' and \'sheetname\' lengths are not equal")
   }
+  if (!is.character(fileprefix) | length(fileprefix) != 1) {
+    stop("\'fileprefix\' must be a character vector with length of 1")
+  }
 
   wb <- createWorkbook()
   walk2(data, sheetname, function(dat, shtname) {
