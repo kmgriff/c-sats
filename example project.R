@@ -40,10 +40,9 @@ summary_from_dat <- function(dat) {
     )
 
   dat_N <- dat %>%
-    summarize_all(function(x) sum(!is.na(x[!str_detect(x, "on't know")])))
+    summarize_all(function(x) sum(!str_detect(x, "on't know") & !is.na(x)))
 
   bind_cols(dat_1_5, dat_special) %>%
-    select(paste0("V", 1:5)) %>%
     bind_rows(dat_N) %>%
     mutate("N" = length(dat[[1]])) %>%
     select("N",
