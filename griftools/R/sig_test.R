@@ -19,9 +19,14 @@
 
 
 
-sig_test <- function(dat1, dat2, type = "chisq") {
+sig_test <- function(dat1 = NULL, dat2 = NULL, type = "chisq") {
   if (!type %in% c("chisq", "fisher")) {
-    stop("'type' must be either \"chisq\" (default) or \"fisher\".")
+    stop("'type' must be either \"chisq\" (default) or \"fisher\"")
+  }
+
+  if(!is.data.frame(dat1) & is.list(dat1)) {
+    dat2 <- dat1[[2]]
+    dat1 <- dat1[[1]]
   }
 
   check_df <- function(dat) {
@@ -51,8 +56,11 @@ sig_test <- function(dat1, dat2, type = "chisq") {
       as.data.frame() %>%
       rownames_to_column() %>%
       select(rowname, "x" = 2, "n" = 3) %>%
+      slice(-1) %>%
       mutate("Current" = x / n) %>%
-      select(rowname, Current)
+      modify_at("Current", function(x) ifelse(is.nan(x) | is.na(x), "N/A", round(x * 100, 1))) %>%
+      select(rowname, Current) %>%
+      add_row(.before = 1, rowname = "N", Current = dat$N[1])
 
     return(pulse)
   }
@@ -87,14 +95,14 @@ sig_test <- function(dat1, dat2, type = "chisq") {
   if (type == "chisq") {
     pulse <- pulse %>%
       rowwise() %>%
-      mutate("p" = ifelse((n1 >= x1) & (n2 >= x2),
+      mutate("p" = ifelse((n1 >= x1) & (n2 >= x2) & (n1 > 0) & (n2 > 0),
         prop.test(matrix(c(x1, x2, n1 - x1, n2 - x2), nc = 2), correct = FALSE)$p.value,
         NA
       ))
   } else if (type == "fisher") {
     pulse <- pulse %>%
       rowwise() %>%
-      mutate("p" = ifelse((n1 >= x1) & (n2 >= x2),
+      mutate("p" = ifelse((n1 >= x1) & (n2 >= x2) & (n1 > 0) & (n2 > 0),
         fisher.test(matrix(c(x1, x2, n1 - x1, n2 - x2), nc = 2))$p.value,
         NA
       ))
@@ -109,14 +117,15 @@ sig_test <- function(dat1, dat2, type = "chisq") {
 
     # Format NAs/NaNs and round values
     modify_at(c("Previous", "Current", "Difference"), function(x) round(x * 100, 1)) %>%
-    modify_at("p", function(x) round(x, 3)) %>%
-    modify_at(c("Previous", "Current"), function(x) ifelse(x == "NaN" | is.na(x), "N/A", x)) %>%
+    modify_at("p", function(x) ifelse(is.nan(x), 1, round(x, 3))) %>%
+    modify_at(c("Previous", "Current"), function(x) ifelse(is.nan(x) | is.na(x), "N/A", x)) %>%
 
     # Choose variables to export
     select(rowname, Previous, Current, Difference, p) %>%
 
     # Re-add Ns
-    add_row(.before = 1, rowname = "N", Previous = dat1$N[1], Current = dat2$N[1])
+    add_row(.before = 1, rowname = "N", Previous = dat1$N[1], Current = dat2$N[1]) %>%
+    ungroup()
 
   return(pulse)
 }
