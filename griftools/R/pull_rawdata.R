@@ -4,10 +4,12 @@
 # for data files matching these terms, and imports a dataset based on its extension. Throws an error
 # if 0 or multiple files are detected, or if an unsupported extension is detected.
 
-
+require(tidyverse)
+require(readxl)
+require(haven)
 
 pull_rawdata <- function(..., recursive = TRUE) {
-  terms <- list(...)
+  terms <- list(...) %>% unlist()
   if (length(terms) == 0) {
     stop("search term missing")
   }
@@ -18,8 +20,7 @@ pull_rawdata <- function(..., recursive = TRUE) {
     warning("filenames containing \"~\" excluded")
     filelist <- filelist[grep(filelist, pattern = "~", invert = TRUE)]
   }
-
-  infile <- map(terms, function(pattern) str_subset(filelist, pattern)) %>%
+  infile <- map(terms, ~ str_subset(filelist, .x)) %>%
     reduce(intersect)
 
   if (length(infile) == 0) {
