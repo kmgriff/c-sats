@@ -4,8 +4,8 @@
 # and the second row containing sample sizes for each variable. The first variable of
 # each data frame must be the total sample size and named "N".
 #
-# Significance testing uses a Chi-square test without correction, unless argument "type"
-# is set to "fisher", in which case Fisher's exact test will be used.
+# Significance testing uses a Chi-squared test without correction, unless argument "type"
+# is set to "fisher", in which case Fisher's Exact test will be used.
 #
 # The output is a data frame with the variable names as "rowname", data frame 1's
 # proportion as "Previous", data frame 2's proportion as "Current", the difference as
@@ -17,14 +17,14 @@
 # passed, the output is a data frame with "N/A" for "rowname" and "Current". This can
 # be forced by passing NA as arguments instead of data frames.
 
-
+require(tidyverse)
 
 sig_test <- function(dat1 = NULL, dat2 = NULL, type = "chisq") {
   if (!type %in% c("chisq", "fisher")) {
     stop("'type' must be either \"chisq\" (default) or \"fisher\"")
   }
 
-  if(!is.data.frame(dat1) & is.list(dat1)) {
+  if (!is.data.frame(dat1) & is.list(dat1)) {
     dat2 <- dat1[[2]]
     dat1 <- dat1[[1]]
   }
@@ -41,7 +41,7 @@ sig_test <- function(dat1 = NULL, dat2 = NULL, type = "chisq") {
   # Return N/A dataframe for export if no current data
   if (!is.data.frame(dat2)) {
     if (is.na(dat2)) {
-      return(data.frame(rowname = "N/A", current = "N/A"))
+      return(data.frame(rowname = "N/A", Current = "N/A"))
     }
   }
 
@@ -49,20 +49,25 @@ sig_test <- function(dat1 = NULL, dat2 = NULL, type = "chisq") {
   check_df(dat2)
 
   return_current <- function(dat) {
-    pulse <- dat %>%
-
-      # Transpose columns into rows
+    # Transpose columns into rows
+    dat <- dat %>%
       t() %>%
       as.data.frame() %>%
-      rownames_to_column() %>%
-      select(rowname, "x" = 2, "n" = 3) %>%
-      slice(-1) %>%
-      mutate("Current" = x / n) %>%
-      modify_at("Current", function(x) ifelse(is.nan(x) | is.na(x), "N/A", round(x * 100, 1))) %>%
-      select(rowname, Current) %>%
-      add_row(.before = 1, rowname = "N", Current = dat$N[1])
+      rownames_to_column()
 
-    return(pulse)
+    header <- dat %>%
+      slice(1) %>%
+      select(rowname, "Current" = 2)
+
+    dat <- dat %>%
+      slice(-1) %>%
+      select(rowname, "x" = 2, "n" = 3) %>%
+      mutate("Current" = x / n) %>%
+      select(rowname, Current) %>%
+      modify_at("Current", ~ round(.x * 100, 1)) %>%
+      bind_rows(header, .) %>%
+      modify_at("Current", ~ ifelse(is.nan(.x) | is.na(.x), "N/A", .x)) %>%
+      return()
   }
 
   # Return only current dataframe for export if no previous data available
@@ -79,53 +84,64 @@ sig_test <- function(dat1 = NULL, dat2 = NULL, type = "chisq") {
   check_df(dat1)
 
 
-
+  # Transpose columns into rows
   pulse <- bind_rows(dat1, dat2) %>%
-
-    # Transpose columns into rows
     t() %>%
     as.data.frame() %>%
-    rownames_to_column() %>%
-    rename("x1" = 2, "n1" = 3, "x2" = 4, "n2" = 5) %>%
+    rownames_to_column()
 
-    # Remove "N" row
-    slice(-1)
+  # Rename columns
+  pulse <- pulse %>%
+    rename("x1" = 2, "n1" = 3, "x2" = 4, "n2" = 5)
+
+  # Extract header
+  header <- pulse %>%
+    slice(1) %>%
+    select(rowname, "Previous" = x1, "Current" = x2)
+
+  # Calculate means and st.dev
+  pulse <- pulse %>%
+    slice(-1) %>%
+    mutate("Previous" = x1 / n1, "Current" = x2 / n2) %>%
+    mutate(
+      "s1" = sqrt(Previous * (1 - Previous) / n1),
+      "s2" = sqrt(Current * (1 - Current) / n2)
+    ) %>%
+    rowwise()
 
   # Significance test
   if (type == "chisq") {
     pulse <- pulse %>%
-      rowwise() %>%
       mutate("p" = ifelse((n1 >= x1) & (n2 >= x2) & (n1 > 0) & (n2 > 0),
         prop.test(matrix(c(x1, x2, n1 - x1, n2 - x2), nc = 2), correct = FALSE)$p.value,
         NA
       ))
   } else if (type == "fisher") {
     pulse <- pulse %>%
-      rowwise() %>%
       mutate("p" = ifelse((n1 >= x1) & (n2 >= x2) & (n1 > 0) & (n2 > 0),
         fisher.test(matrix(c(x1, x2, n1 - x1, n2 - x2), nc = 2))$p.value,
         NA
       ))
   }
 
-  pulse <- pulse %>%
-    mutate(
-      "Previous" = x1 / n1,
-      "Current" = x2 / n2,
-      "Difference" = ifelse(p < 0.05, Current - Previous, NA)
-    ) %>%
+  # Add Difference column
+  pulse %>%
 
-    # Format NAs/NaNs and round values
-    modify_at(c("Previous", "Current", "Difference"), function(x) round(x * 100, 1)) %>%
-    modify_at("p", function(x) ifelse(is.nan(x), 1, round(x, 3))) %>%
-    modify_at(c("Previous", "Current"), function(x) ifelse(is.nan(x) | is.na(x), "N/A", x)) %>%
+    # Extract p-value from sig test
+    modify_at("p", ~ ifelse(is.na(.x), NA, round(.x, 3))) %>%
+    mutate("Difference" = ifelse(p < 0.05, Current - Previous, NA)) %>%
+
+    # Round values
+    modify_at(c("Previous", "Current", "Difference"), ~ round(.x * 100, 1)) %>%
+
+    # Add header
+    bind_rows(header, .) %>%
+
+    # Format NAs and NaNs
+    modify_at(c("Previous", "Current"), ~ ifelse(is.na(.x) | is.nan(.x), "N/A", .x)) %>%
 
     # Choose variables to export
     select(rowname, Previous, Current, Difference, p) %>%
-
-    # Re-add Ns
-    add_row(.before = 1, rowname = "N", Previous = dat1$N[1], Current = dat2$N[1]) %>%
-    ungroup()
-
-  return(pulse)
+    ungroup() %>%
+    return()
 }
