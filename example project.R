@@ -5,119 +5,159 @@ library(xlsx)
 library(haven)
 library(griftools)
 
-# Style R files
+# Style R file
 # library(styler)
 # style_dir()
 
 # User-defined variables
-prev_column_list <- c("Q1_OSat", "Q2_Expectation", "Q3_Info", "Q4_Courteous")
-cur_column_list <- prev_column_list
-cur_monthyear <- "May 2019"
-cur_quarter <- "Q2 2019"
-prev_file_search <- "File_April"
-cur_file_search <- "File_May"
-prev_quarter_file_search <- c("File_Jan", "File_Feb", "File_Mar")
-cur_quarter_file_search <- c("File_April", "File_May")
+cur_month <- "December"
+cur_year <- 2019
+data_filesearch <- "Fld Ops SPSS"
+verbs_filesearch <- "Field Ops Verbatim"
 
 
 
-# Create summary from trimmed data frame
+# Generate dates and labels: prev_month, cur_quarter, prev_quarter, t_cur_mth, t_cur_qtr, t_prev_mth, t_prev_qtr, t_yr, is_eoq
+griftools::generate_dates()
+
+# Pull and clean all data files
+rawdat <- map(dir(pattern = data_filesearch), ~ read_sav(.x)) %>%
+  bind_rows() %>%
+
+  # Create Date column from Month (Q8) and Year (Q9)
+  mutate(Date = lubridate::myd(paste(Q8, Q9, "1"))) %>%
+  arrange(Date)
+
+
+
+# Create 2 x N summary for use in sig-testing function
 summary_from_dat <- function(dat) {
+  big_N <- length(dat[[1]])
 
-  # Scale 1-5 (positive: 4-5):
-  # [1] Q1_OSat
-  # [3] Q3_Info
-  # [4] Q4_Courteous
-  dat_1_5 <- dat %>%
-    select(V1, V3, V4) %>%
-    summarize_all(function(x) sum(x %in% 4:5, na.rm = TRUE))
+  # Selection of variables on 0-10 scale
+  dat_0_10 <- dat %>%
+    select(Q2_1, Q2_2, Q3_1, Q3_2, Q3_3, Q3_4, Q3_5)
 
-  # Special:
-  # [2] Q2_Expectation: "Exceed expectations" or "Exceed your expectations", exclude "Don't know"
-  dat_special <- dat %>%
-    summarize(
-      V2 = sum(str_detect(V3, "Exceed"), na.rm = TRUE)
-    )
+  # Expectations question
+  dat_expect <- dat %>%
+    select(Expect = Q2_3)
 
-  dat_N <- dat %>%
-    summarize_all(function(x) sum(!str_detect(x, "on't know") & !is.na(x)))
+  # Calculate Ns
+  dat_N <- bind_cols(dat_0_10, dat_expect) %>%
+    summarize_all(~ sum(.x %in% 0:10))
 
-  bind_cols(dat_1_5, dat_special) %>%
+  # Satisfied (6-10)
+  dat_0_10 <- dat_0_10 %>%
+    summarize_all(~ sum(.x %in% 6:10))
+
+  # Exceeds expectations (3)
+  dat_expect <- dat_expect %>%
+    summarize_all(~ sum(.x == 3, na.rm = TRUE))
+
+  # Combine variables
+  bind_cols(dat_0_10, dat_expect) %>%
     bind_rows(dat_N) %>%
-    mutate("N" = length(dat[[1]])) %>%
+    mutate("N" = big_N) %>%
+  
+    # Move and rename columns
     select("N",
-      "Overall Satisfaction" = V1,
-      "Exceed your expectations" = V2,
-      "Information provided" = V3,
-      "Treating you with courtesy" = V4
-    )
-}
-
-# Insert blank rows to match report format
-format_report <- function(dat) {
-  dat %>%
-    add_row(.before = 2, rowname = "Overall Measures") %>%
-    add_row(.before = 4) %>%
-    add_row(.before = 5, rowname = "Expectation Measure") %>%
-    add_row(.before = 7) %>%
-    add_row(.before = 8, rowname = "Attributes") %>%
-
-    # Convert to dataframe
-    as.data.frame()
+      "Overall Satisfaction with Company's performance" = Q2_1,
+      "Exceed your expectations" = Expect,
+      "Overall Satisfaction with Field Crew" = Q3_1,
+      "Tracking variable 4" = Q3_2,
+      "Tracking variable 5" = Q3_3,
+      "Tracking variable 6" = Q3_4
+    ) %>%
+    return()
 }
 
 
 
+# Generate pulse report with quarterly columns (if end of quarter)
+final_results <- griftools::generate_pulse(dat = rawdat,
+                                           sum_func = summary_from_dat,
+                                           qtr_columns = is_eoq,
+                                           ytd_column = FALSE) %>%
 
-# Pull monthly data
-prev_dat <- griftools::pull_rawdata(prev_file_search)
-cur_dat <- griftools::pull_rawdata(cur_file_search)
-
-# Check for changed columns
-cur_column_list <- griftools::check_col_changes(prev_dat, cur_dat, prev_column_list, cur_column_list)
-
-# Create summaries
-prev_sum <- prev_dat %>%
-  griftools::trim_rawdata(prev_column_list) %>%
-  summary_from_dat()
-cur_sum <- cur_dat %>%
-  griftools::trim_rawdata(cur_column_list) %>%
-  summary_from_dat()
-
-# Create pulse report using chi-square sig test without correction
-final_month <- griftools::sig_test(prev_sum, cur_sum) %>%
-  format_report()
+  # Insert blank rows to match pulse report format
+  add_row(.before = 2, rowname = "Overall Performance") %>%
+  add_row(.before = 6) %>%
+  add_row(.before = 7, rowname = "Field Crew Personnel")
 
 
 
-# Pull quarterly data
-q1_dat <- map(prev_quarter_file_search, griftools::pull_rawdata)
-q2_dat <- map(cur_quarter_file_search, griftools::pull_rawdata)
+# Pull results by field tech
+crew_dat <- rawdat %>%
+  filter(Date == t_cur_mth) %>%
+  select(Tech, Q2_1, Q3_1) %>%
+  group_by(Tech) %>%
+  arrange(Tech)
 
-# Create summaries
-q1_sum <- q1_dat %>%
-  bind_rows() %>%
-  griftools::trim_rawdata(prev_column_list) %>%
-  summary_from_dat()
-q2_sum <- q2_dat %>%
-  bind_rows() %>%
-  griftools::trim_rawdata(prev_column_list) %>%
-  summary_from_dat()
+# Generate Field Crew pulse report
+final_crew <- full_join(
+  crew_dat %>% summarize("N" = n()),
+  crew_dat %>% summarize_all(~ {
+    sum(.x %in% 6:10, na.rm = TRUE) * 100 / sum(.x %in% 0:10, na.rm = TRUE)
+  }),
+  by = "Tech"
+) %>%
 
-# Modify and use if columns change between months
-# q2_sum <- bind_rows(
-#   q2_dat[1:2] %>%
-#     map(griftools::trim_rawdata(prev_column_list)),
-#   q2_dat[3] %>%
-#     griftools::trim_rawdata(cur_column_list)
-#   ) %>%
-#   summary_from_dat()
+  # Format NAs/NaNs
+  modify_at(c("Q2_1", "Q3_1"), ~ round(.x, 1)) %>%
+  modify(~ ifelse(.x == "NaN" | is.na(.x), "N/A", .x)) %>%
+  select("Tech",
+    "N",
+    "Overall Satisfaction with Company's performance" = Q2_1,
+    "Overall Satisfaction with Field Crew" = Q3_1
+  ) %>%
 
-# Create pulse report using chi-square sig test without correction
-final_quarter <- griftools::sig_test(q1_sum, q2_sum) %>%
-  format_report()
+  # Transpose rows and columns
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
 
+  # Insert blank rows to match pulse report format
+  add_row(.before = 3, rowname = "OVERALL MEASURE") %>%
+  add_row(.before = 5) %>%
+  add_row(.before = 6, rowname = "FIELD CREW MEASURE")
+
+
+
+# Export pulse report and crew results
 griftools::export_workbook(
-  list(final_month, final_quarter), list(cur_monthyear, cur_quarter),
-  str_glue("R Export_Satisfaction Report_{cur_monthyear}")
+  data = list(final_results, final_crew),
+  sheetname = c(paste(cur_month, cur_year), "Field Crew"),
+  fileprefix = str_glue("Field Ops Results - {cur_month} {cur_year}")
+)
+
+
+
+# Pull verbatims from file
+verbs <- dir(pattern = verbs_filesearch) %>%
+  read_excel() %>%
+  filter(FileDate == t_cur_mth) %>%
+  select(
+    Verbatim = Q4_OE,
+    "Company Satisfaction" = Q2_1,
+    "Field Crew Satisfaction" = Q3_1,
+    Expectations = Q2_3,
+    Date, "Field Order", Street, City, Zip, Month, Year
+  ) %>%
+  filter(!is.na(Verbatim)) %>%
+  mutate_at("Expectations", ~case_when(
+    .x == 1 ~ "Fall short",
+    .x == 2 ~ "Meet expectations", 
+    .x == 3 ~ "Exceed expectations",
+    .x == 4 ~ "Don't know",
+    .x == 5 ~ "No answer",
+    TRUE ~ as.character(NA)
+    )) %>%
+  arrange(`Company Satisfaction`)
+
+
+# Export verbatims
+griftools::export_workbook(
+  data = verbs,
+  sheetname = "Field Ops",
+  fileprefix = str_glue("Field Ops - {cur_month} {cur_year} Verbatims")
 )
