@@ -3,7 +3,8 @@
 # This function accepts a list of data frames, a list of sheetnames, and a filename prefix,
 # then creates an Excel workbook. The filename is in the format "[fileprefix]_YYYYMMDD_HHmmss".
 
-
+require(tidyverse)
+require(xlsx)
 
 export_workbook <- function(data, sheetname = "Sheet1", fileprefix = "R Export") {
   if (is.data.frame(data)) {
