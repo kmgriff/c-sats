@@ -12,7 +12,7 @@ generate_pulse <- function(dat, sum_func, DateCol = "Date", qtr_columns = TRUE, 
   checkvars <- c("t_prev_mth", "t_cur_mth", "prev_month", "cur_month")
   if (qtr_columns) checkvars <- c(checkvars, "t_prev_qtr", "t_cur_qtr", "prev_quarter", "cur_quarter")
   if (ytd_column) checkvars <- c(checkvars, "t_yr", "cur_year")
-  map(checkvars, ~ if (!exists(.x)) stop(str_glue("object '{.x}' not found")))
+  walk(checkvars, ~ if (!exists(.x)) stop(str_glue("object '{.x}' not found")))
 
   # Suppress inaccurate chi-square warnings
   quiet_sigtest <- purrr::quietly(griftools::sig_test)
@@ -20,7 +20,7 @@ generate_pulse <- function(dat, sum_func, DateCol = "Date", qtr_columns = TRUE, 
   # Generate previous and current month values, difference between months, and p-value
   monthly <- quiet_sigtest(
     dat %>% filter_at(vars(DateCol), all_vars(. >= t_prev_mth & . < t_cur_mth)) %>% sum_func(),
-    dat %>% filter_at(vars(DateCol), all_vars(. >= t_cur_mth)) %>% sum_func(),
+    dat %>% filter_at(vars(DateCol), all_vars(. >= t_cur_mth & . < t_cur_mth + months(1))) %>% sum_func(),
     type = sig
   )$result %>%
     rename_at("Current", ~cur_month)
@@ -35,7 +35,7 @@ generate_pulse <- function(dat, sum_func, DateCol = "Date", qtr_columns = TRUE, 
     # Generate previous and current quarter values, difference between quarters, and p-value
     quarterly <- quiet_sigtest(
       dat %>% filter_at(vars(DateCol), all_vars(. >= t_prev_qtr & . < t_cur_qtr)) %>% sum_func(),
-      dat %>% filter_at(vars(DateCol), all_vars(. >= t_cur_qtr)) %>% sum_func(),
+      dat %>% filter_at(vars(DateCol), all_vars(. >= t_cur_qtr & . < t_cur_mth + months(1))) %>% sum_func(),
       type = sig
     )$result %>%
       rename_at("Current", ~cur_quarter)
