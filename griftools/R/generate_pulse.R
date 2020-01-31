@@ -1,4 +1,4 @@
-# Generate dates
+# Generate pulse
 #
 # This function requires that griftools::generate_dates has been called.  Accepts a data frame,
 # a function to convert raw data into 2 x N summaries, the name of the Date column, and options
