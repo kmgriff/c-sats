@@ -36,7 +36,7 @@ summary_from_dat <- function(dat) {
 
   # Selection of variables on 0-10 scale
   dat_0_10 <- dat %>%
-    select(Q2_1, Q2_2, Q3_1, Q3_2, Q3_3, Q3_4, Q3_5)
+    select(Q2_1, Q2_2, Q3_1, Q3_2, Q3_3, Q3_4)
 
   # Expectations question
   dat_expect <- dat %>%
@@ -145,9 +145,9 @@ verbs <- dir(pattern = verbs_filesearch) %>%
   ) %>%
   filter(!is.na(Verbatim)) %>%
   mutate_at("Expectations", ~case_when(
-    .x == 1 ~ "Fall short",
-    .x == 2 ~ "Meet expectations", 
-    .x == 3 ~ "Exceed expectations",
+    .x == 1 ~ "Fell short",
+    .x == 2 ~ "Meets expectations", 
+    .x == 3 ~ "Exceeds expectations",
     .x == 4 ~ "Don't know",
     .x == 5 ~ "No answer",
     TRUE ~ as.character(NA)
