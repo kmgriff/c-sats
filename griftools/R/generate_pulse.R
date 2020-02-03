@@ -65,13 +65,10 @@ generate_pulse <- function(dat, sum_func, DateCol = "Date", qtr_columns = TRUE, 
     } else {
 
       # Generate YTD columns (sig_test returns only "rowname" and "Current" if passed two identical data frames)
-      ytd <- quiet_sigtest(
-        dat %>%
+      ytd <- dat %>%
           filter_at(vars(DateCol), all_vars(lubridate::year(.) == cur_year)) %>%
           sum_func() %>%
-          list(., .),
-        type = sig
-        )$result %>%
+          quiet_sigtest(., ., type = sig)$result %>%
         rename_at("Current", ~paste(cur_year, "YTD"))
     }
 
