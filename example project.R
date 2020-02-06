@@ -21,7 +21,7 @@ verbs_filesearch <- "Field Ops Verbatim"
 griftools::generate_dates()
 
 # Pull and clean all data files
-rawdat <- map(dir(pattern = data_filesearch), ~ read_sav(.x)) %>%
+rawdat <- map(dir(pattern = data_filesearch), read_sav) %>%
   bind_rows() %>%
 
   # Create Date column from Month (Q8) and Year (Q9)
@@ -143,7 +143,7 @@ verbs <- dir(pattern = verbs_filesearch) %>%
     Expectations = Q2_3,
     Date, "Field Order", Street, City, Zip, Month, Year
   ) %>%
-  filter(!is.na(Verbatim)) %>%
+  filter(!is.na(Verbatim) & Verbatim != "") %>%
   mutate_at("Expectations", ~case_when(
     .x == 1 ~ "Fell short",
     .x == 2 ~ "Meets expectations", 
